@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 5301300674aa43144bc8818797a82979
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 367532
+  packageName: FaceSync - Audio Lip Sync & Facial Animation
+  packageVersion: 1.2.1
+  assetPath: Assets/FrostemberStudios/FaceSync/Demo/Resources/VisemeMap/NewVisemeMapping.asset
+  uploadId: 923142

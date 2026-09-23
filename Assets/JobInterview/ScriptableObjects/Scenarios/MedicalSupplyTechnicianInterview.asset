@@ -1,0 +1,78 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7cd559a76f9bc4440997c4317ed3b680, type: 3}
+  m_Name: MedicalSupplyTechnicianInterview
+  m_EditorClassIdentifier: 
+  simulationId: job-interview
+  scenarioId: medical-supply-technician-interview-v1
+  displayRole: Medical Supply Technician
+  employerType: Healthcare supply or hospital logistics organization
+  introduction: 'Welcome. In this practice interview, you will be asked several questions
+    about working as a Medical Supply Technician.
+
+    
+
+    Take the time you
+    need to consider each question. You may ask for clarification if a question is
+    unclear. Your responses in this prototype remain within the current interview
+    session and are not included in ordinary Recursor behavioral telemetry.'
+  completionMessage: 'Welcome. In this practice interview, you will be asked several
+    questions about working as a Medical Supply Technician.
+
+    
+
+    Take the
+    time you need to consider each question. You may ask for clarification if a question
+    is unclear. Your responses in this prototype remain within the current interview
+    session and are not included in ordinary Recursor behavioral telemetry.'
+  questions:
+  - questionId: interest-in-role
+    promptText: 'What interests you about working as a Medical Supply Technician?
+
+'
+    clarificationText: Please describe why this type of medical supply work interests
+      you.
+    topicTag: motivation
+  - questionId: inventory-organization
+    promptText: How would you keep track of supplies stored in several different
+      locations?
+    clarificationText: Please describe how you would stay organized when supplies
+      are kept in more than one place.
+    topicTag: organization
+  - questionId: 'unexpected-location '
+    promptText: What would you do if an item did not match its expected storage location?
+    clarificationText: Please describe how you would respond if a supply appeared
+      to be stored in the wrong place.
+    topicTag: problem-solving
+  - questionId: 'accuracy-under-workload '
+    promptText: 'How would you maintain accuracy while completing several stocking
+      requests?
+
+'
+    clarificationText: Please describe how you would avoid mistakes when you have
+      several stocking tasks to complete.
+    topicTag: accuracy
+  - questionId: unclear-instruction
+    promptText: 'What would you do if you were unsure about a stocking instruction?
+
+'
+    clarificationText: Please describe how you would respond when you do not fully
+      understand an instruction.
+    topicTag: clarification
+  - questionId: 'reporting-concern '
+    promptText: How would you communicate a possible inventory or safety issue to
+      a coworker or supervisor?
+    clarificationText: 'Please describe how you would tell someone at work about
+      a supply or safety concern.
+
+'
+    topicTag: communication

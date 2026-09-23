@@ -1,0 +1,17 @@
+{
+    "name": "Frostember.FaceSync.Runtime",
+    "rootNamespace": "",
+    "references": [
+        "GUID:bf7126905a54c9746b9c475d69312766",
+        "GUID:f06555f75b070af458a003d92f9efb00"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

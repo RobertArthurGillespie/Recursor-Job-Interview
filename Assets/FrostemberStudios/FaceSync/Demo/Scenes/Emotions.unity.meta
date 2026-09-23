@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 794f15e6acb9efa4bb0d32a72dfa6469
+DefaultImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 367532
+  packageName: FaceSync - Audio Lip Sync & Facial Animation
+  packageVersion: 1.2.1
+  assetPath: Assets/FrostemberStudios/FaceSync/Demo/Scenes/Emotions.unity
+  uploadId: 923142

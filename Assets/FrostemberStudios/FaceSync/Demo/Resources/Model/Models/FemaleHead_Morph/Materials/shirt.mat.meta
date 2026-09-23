@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 0ad01ecbcffbb4c91af7ffa1ebc14f74
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 367532
+  packageName: FaceSync - Audio Lip Sync & Facial Animation
+  packageVersion: 1.2.1
+  assetPath: Assets/FrostemberStudios/FaceSync/Demo/Resources/Model/Models/FemaleHead_Morph/Materials/shirt.mat
+  uploadId: 923142

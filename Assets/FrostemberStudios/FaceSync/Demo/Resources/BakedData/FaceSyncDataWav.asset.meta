@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 13e62ca1b865672499507151ca37d56a
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 367532
+  packageName: FaceSync - Audio Lip Sync & Facial Animation
+  packageVersion: 1.2.1
+  assetPath: Assets/FrostemberStudios/FaceSync/Demo/Resources/BakedData/FaceSyncDataWav.asset
+  uploadId: 923142

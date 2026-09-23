@@ -1,0 +1,78 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ba532180d72de154e9ad36c634cda2c7, type: 3}
+  m_Name: NewVisemeMapping
+  m_EditorClassIdentifier: Frostember.FaceSync.Runtime::Frostember.FaceSync.VisemeMappingProfile
+  editorReferencePrefab: {fileID: 100016, guid: cbaf1c32e7ec84f10a51be1b09c0ef46, type: 3}
+  globalWeightMultiplier: 100
+  smoothingSpeed: 50
+  mappings:
+  - viseme: 0
+    blendShapes:
+    - blendShapeName: blendShape1.sil
+      weight: 0
+  - viseme: 1
+    blendShapes:
+    - blendShapeName: blendShape1.PP
+      weight: 1
+  - viseme: 2
+    blendShapes:
+    - blendShapeName: blendShape1.FF
+      weight: 1
+  - viseme: 3
+    blendShapes:
+    - blendShapeName: blendShape1.TH
+      weight: 1
+  - viseme: 4
+    blendShapes:
+    - blendShapeName: blendShape1.DD
+      weight: 1
+  - viseme: 5
+    blendShapes:
+    - blendShapeName: blendShape1.kk
+      weight: 1
+  - viseme: 6
+    blendShapes:
+    - blendShapeName: blendShape1.CH
+      weight: 1
+  - viseme: 7
+    blendShapes:
+    - blendShapeName: blendShape1.SS
+      weight: 1
+  - viseme: 8
+    blendShapes:
+    - blendShapeName: blendShape1.nn
+      weight: 1
+  - viseme: 9
+    blendShapes:
+    - blendShapeName: blendShape1.RR
+      weight: 1
+  - viseme: 10
+    blendShapes:
+    - blendShapeName: blendShape1.aa
+      weight: 1
+  - viseme: 11
+    blendShapes:
+    - blendShapeName: blendShape1.E
+      weight: 1
+  - viseme: 12
+    blendShapes:
+    - blendShapeName: blendShape1.ih
+      weight: 1
+  - viseme: 13
+    blendShapes:
+    - blendShapeName: blendShape1.oh
+      weight: 1
+  - viseme: 14
+    blendShapes:
+    - blendShapeName: blendShape1.ou
+      weight: 1

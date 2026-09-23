@@ -1,0 +1,31 @@
+========================================================================
+THIRD-PARTY NOTICES FOR FROSTEMBER FACESYNC
+========================================================================
+
+This file contains third-party notices and/or additional terms and conditions 
+for third-party software components included in, or required by, the 
+Frostember FaceSync package.
+
+------------------------------------------------------------------------
+1. Oculus LipSync Unity Integration
+------------------------------------------------------------------------
+Frostember FaceSync utilizes and depends on the Oculus LipSync Unity Integration 
+provided by Meta Platforms, Inc. for core audio and phoneme analysis.
+
+Copyright (c) Meta Platforms, Inc. and affiliates. All rights reserved.
+
+Use of the Oculus SDK and the Oculus LipSync Unity Integration is governed 
+by the Oculus SDK License Agreement. By using the Frostember FaceSync package 
+in conjunction with the Oculus LipSync Integration, you agree to comply with 
+the terms and conditions set forth by Meta Platforms, Inc.
+
+The official Oculus LipSync Integration package and its associated licenses 
+can be found at the official Meta developer portal:
+https://developer.oculus.com/downloads/package/oculus-lipsync-unity/
+
+Disclaimer: Frostember Studios is not affiliated with, endorsed by, or 
+sponsored by Meta Platforms, Inc.
+
+========================================================================
+END OF THIRD-PARTY NOTICES
+========================================================================

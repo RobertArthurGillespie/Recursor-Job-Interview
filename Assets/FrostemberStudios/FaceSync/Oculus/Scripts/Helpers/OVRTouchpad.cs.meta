@@ -1,0 +1,20 @@
+fileFormatVersion: 2
+guid: edde1cb2a78471f409fce5084e6c720c
+timeCreated: 1528830158
+licenseType: Pro
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 367532
+  packageName: FaceSync - Audio Lip Sync & Facial Animation
+  packageVersion: 1.2.1
+  assetPath: Assets/FrostemberStudios/FaceSync/Oculus/Scripts/Helpers/OVRTouchpad.cs
+  uploadId: 923142

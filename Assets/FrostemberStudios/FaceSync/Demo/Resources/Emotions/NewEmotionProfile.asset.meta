@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 82b5fdaeaa926fe4eb6a696d2108d265
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 367532
+  packageName: FaceSync - Audio Lip Sync & Facial Animation
+  packageVersion: 1.2.1
+  assetPath: Assets/FrostemberStudios/FaceSync/Demo/Resources/Emotions/NewEmotionProfile.asset
+  uploadId: 923142

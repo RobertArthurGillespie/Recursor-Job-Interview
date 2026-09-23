@@ -1,0 +1,19 @@
+fileFormatVersion: 2
+guid: c60ad94815c68aa41a786306cd588495
+timeCreated: 1439845885
+licenseType: Pro
+MonoImporter:
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 367532
+  packageName: FaceSync - Audio Lip Sync & Facial Animation
+  packageVersion: 1.2.1
+  assetPath: Assets/FrostemberStudios/FaceSync/Oculus/Scripts/Helpers/OVRLipSyncDebugConsole.cs
+  uploadId: 923142

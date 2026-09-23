@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: face7e428521ce6479e877dd0b392c79
+AssetOrigin:
+  serializedVersion: 1
+  productId: 367532
+  packageName: FaceSync - Audio Lip Sync & Facial Animation
+  packageVersion: 1.2.1
+  assetPath: Assets/FrostemberStudios/FaceSync/Demo/Scripts/FaceSyncTargetMover.cs
+  uploadId: 923142

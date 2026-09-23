@@ -1,0 +1,20 @@
+{
+    "name": "Frostember.FaceSync.Editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:cc44bb0b16897a04ab15e5bad93938a0",
+        "GUID:bf7126905a54c9746b9c475d69312766",
+        "GUID:a28a0ede888098f48be24ef95777d9bd"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

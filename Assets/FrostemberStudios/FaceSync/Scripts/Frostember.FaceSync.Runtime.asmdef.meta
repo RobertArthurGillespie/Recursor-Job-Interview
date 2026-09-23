@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: cc44bb0b16897a04ab15e5bad93938a0
+AssemblyDefinitionImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 367532
+  packageName: FaceSync - Audio Lip Sync & Facial Animation
+  packageVersion: 1.2.1
+  assetPath: Assets/FrostemberStudios/FaceSync/Scripts/Frostember.FaceSync.Runtime.asmdef
+  uploadId: 923142

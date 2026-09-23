@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: e906d4c6bf3304d5dac06eee4fe24c54
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 367532
+  packageName: FaceSync - Audio Lip Sync & Facial Animation
+  packageVersion: 1.2.1
+  assetPath: Assets/FrostemberStudios/FaceSync/Demo/Resources/Model/Models/FemaleHead_Morph/Materials/eyelashes.mat
+  uploadId: 923142

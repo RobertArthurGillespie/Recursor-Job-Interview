@@ -1,0 +1,70 @@
+Version 1.2.0（current）
+
+Released: April 2026
+
+Version 1.2.0 - The IK Look Tracking Update
+
+✨ Core Features & Systems
+
+IK Look Tracking: Introduced a robust inverse kinematics (IK) system allowing characters' heads and eyes to dynamically track any target Transform in the scene.
+Customizable IK Bones: Added granular control to assign multiple head/neck and eye bones. Each bone supports custom Influence weights, Max Angle limits (to prevent unnatural twists), and an intuitive Dropdown for selecting its native Forward Axis.
+Advanced Procedural Blending: Completely rewrote the internal procedural pipeline to allow flawless, additive blending between the IK tracking and existing procedural head noise (from speaking), eliminating feedback loops and rotation snapping.
+
+🛠️ Editor Tools & Quality of Life
+
+IK Inspector Module: Upgraded the FaceSyncController Editor with a dedicated "🎯 IK Look Tracking" section, featuring clean nested lists for head and eye bones.
+Gizmo Debugging: Added automatic Editor Gizmos (a targeting sphere and line of sight) that render whenever a Look Target is assigned, making setup and debugging instantly visual.
+C# API for Look Tracking: Added fast public methods SetLookTarget(Transform target), ClearLookTarget(), and SetIKWeight(float weight) to easily shift the character's focus dynamically during gameplay or cutscenes.
+
+--------------------------------------------------------------------------------
+
+Version 1.1.0
+
+Released: April 2026
+
+Version 1.1.0 - The Emotion & Expression Update
+
+✨ Core Features & Systems
+
+Emotion & Expression Mixer: A dedicated, robust module inside FaceSyncController that allows developers to seamlessly blend custom facial expressions (e.g., Happy, Sad, Angry) with active lip-sync data. 
+Emotion Profiles: Introduced a new ScriptableObject data layer (EmotionProfile) for creating and storing custom emotions by mapping multiple blendshapes with variable weights.
+C# Playback API for Emotions: Added fast and accessible public methods SetEmotion(string emotionName) and ClearEmotion() to trigger or disable emotions dynamically via scripts.
+
+🎬 Timeline & Playback
+
+Timeline Emotion Track: Introduced FaceSyncEmotionTrack and FaceSyncEmotionClip for native Unity Timeline support. Emo clips can now be layered over baked or realtime lip-sync tracks for perfectly orchestrated, AAA-quality cutscenes.
+Smart Timeline Clip Editor: Upgraded Timeline clips with a custom inspector that automatically populates a dropdown with all available emotions from the assigned Emotion Profile—eliminating typing errors.
+Advanced Blending Logic: The Timeline Mixer was heavily refactored to allow flawless additive blending and priority management between realtime speaking, baked speaking, eye overrides, and dynamic emotions without conflicting blendshapes.
+
+🛠️ Editor Tools & Quality of Life
+
+Inspector Play Mode Testing: Revamped the FaceSyncController Editor to include a dynamic UI dropdown. It automatically extracts all emotions from the assigned profile and allows developers to Play/Stop them in real-time while previewing audio.
+Visual Emotion Mapper: Built a highly intuitive custom Editor for Emotion Profiles, allowing users to drag-and-drop a reference prefab and select blendshapes from dropdown menus to create complex expressions in seconds.
+
+--------------------------------------------------------------------------------
+
+Version 1.0.0
+
+Released: March 2026
+
+Version 1.0.0 - Initial Release
+
+Release Date: March 2026
+
+✨ Core Features & Systems
+
+Initial Release of FaceSyncController: The master component for unifying lip-sync, procedural eye movement (blinking, saccadic darts, micro-jitters), and voice-driven head motion.
+Offline Baking Engine: Added FaceSyncBaker and a custom Editor Window to pre-calculate audio analysis into highly optimized FaceSyncAnimationAsset files for zero-CPU runtime playback.
+Automated Viseme Mapping: Added VisemeMappingProfile with 1-click auto-generation algorithms for ARKit (52 blendshapes) and Character Creator 3/4/5 standards.
+🎬 Timeline & Playback
+
+Native Timeline Integration: Introduced FaceSyncTrack, FaceSyncClip, and a custom FaceSyncTrackMixer with smooth data interpolation and dynamic behavior overrides.
+C# Playback API: Added the FaceSyncPlayer component for easy script-driven dialogue triggers (Play(), Stop()) with perfectly synced audio timing.
+🎙️ Live Input & VTubing
+
+Real-time Microphone Capture: Added Frostember_MicrophoneInput component to route system microphone data directly into the lip-sync engine with anti-stuttering protection.
+🛠️ Editor Tools & Quality of Life
+
+Setup Wizard: Added a 1-click setup tool (FaceSyncSetupWizard) to automatically configure characters with all required components.
+Live Emotion Preview: Added Editor UI to test facial expressions and blendshape weights without entering Play Mode.
+Performance Systems: Implemented distance-based LOD checks and frustum culling to automatically disable processing for off-screen characters

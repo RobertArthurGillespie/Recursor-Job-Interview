@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 832db702f15ede941a9869d54c70c470
+DefaultImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 367532
+  packageName: FaceSync - Audio Lip Sync & Facial Animation
+  packageVersion: 1.2.1
+  assetPath: Assets/FrostemberStudios/FaceSync/Demo/Scenes/Audioclip.unity
+  uploadId: 923142

@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cad6927c56040204bbe3848431bfca92, type: 3}
+  m_Name: NewEmotionProfile
+  m_EditorClassIdentifier: Frostember.FaceSync.Runtime::Frostember.FaceSync.EmotionProfile
+  editorReferencePrefab: {fileID: 100016, guid: cbaf1c32e7ec84f10a51be1b09c0ef46, type: 3}
+  globalWeightMultiplier: 100
+  emotions:
+  - emotionName: Happy
+    blendShapes:
+    - blendShapeName: blendShape1.laughter
+      weight: 1

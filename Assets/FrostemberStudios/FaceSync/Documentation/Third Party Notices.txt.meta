@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 558841ab430646848ad996b8cf02352f
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 367532
+  packageName: FaceSync - Audio Lip Sync & Facial Animation
+  packageVersion: 1.2.1
+  assetPath: Assets/FrostemberStudios/FaceSync/Documentation/Third Party Notices.txt
+  uploadId: 923142

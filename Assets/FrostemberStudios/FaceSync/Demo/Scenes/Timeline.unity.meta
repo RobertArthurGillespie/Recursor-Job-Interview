@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 034f23c59da04254185c8d47740d8c37
+DefaultImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 367532
+  packageName: FaceSync - Audio Lip Sync & Facial Animation
+  packageVersion: 1.2.1
+  assetPath: Assets/FrostemberStudios/FaceSync/Demo/Scenes/Timeline.unity
+  uploadId: 923142

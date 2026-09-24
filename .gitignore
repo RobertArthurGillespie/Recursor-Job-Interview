@@ -29,3 +29,8 @@ ExportedObj/
 
 sysinfo.txt
 crashlytics-build.properties
+
+# Stage 6B: local settings asset holding the parent Blazor origin for the WebGL bridge.
+# Never commit a real origin; see Docs/job-interview-webgl-bridge.md. Exact paths only.
+/Assets/JobInterview/Resources/RecursorInterviewBridgeSettings.asset
+/Assets/JobInterview/Resources/RecursorInterviewBridgeSettings.asset.meta

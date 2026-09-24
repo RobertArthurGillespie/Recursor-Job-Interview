@@ -25,8 +25,12 @@ public class InterviewUIController : MonoBehaviour
     [SerializeField] private Button clarifyButton;
     [SerializeField] private Button resetButton;
 
+    [Tooltip("Stage 6B: ends a host-backed interview (conversation.end, user_ended). Optional; hidden in scripted mode.")]
+    [SerializeField] private Button endButton;
+
     private InterviewTurn displayedTurn;
     private bool operationInProgress;
+    private bool endInProgress;
     private bool listenersAttached;
     private int viewGeneration;
     private string localError = string.Empty;
@@ -43,6 +47,7 @@ public class InterviewUIController : MonoBehaviour
 
         viewGeneration++;
         operationInProgress = false;
+        endInProgress = false;
         localError = string.Empty;
         displayedTurn = null;
 
@@ -56,6 +61,9 @@ public class InterviewUIController : MonoBehaviour
         submitButton.onClick.AddListener(OnSubmitClicked);
         clarifyButton.onClick.AddListener(OnClarifyClicked);
         resetButton.onClick.AddListener(OnResetClicked);
+
+        if (endButton != null)
+            endButton.onClick.AddListener(OnEndClicked);
 
         listenersAttached = true;
         Refresh();
@@ -82,6 +90,9 @@ public class InterviewUIController : MonoBehaviour
             clarifyButton.onClick.RemoveListener(OnClarifyClicked);
             resetButton.onClick.RemoveListener(OnResetClicked);
 
+            if (endButton != null)
+                endButton.onClick.RemoveListener(OnEndClicked);
+
             listenersAttached = false;
 
             // Hiding/disabling this interview screen ends its local session.
@@ -94,6 +105,7 @@ public class InterviewUIController : MonoBehaviour
 
         displayedTurn = null;
         operationInProgress = false;
+        endInProgress = false;
         localError = string.Empty;
     }
 
@@ -114,7 +126,7 @@ public class InterviewUIController : MonoBehaviour
 
     private void OnStartClicked()
     {
-        if (operationInProgress)
+        if (operationInProgress || !session.CanStart)
             return;
 
         localError = string.Empty;
@@ -157,6 +169,17 @@ public class InterviewUIController : MonoBehaviour
         {
             await RunOperationAsync(
                 () => session.SubmitResponseAsync(submittedTurn, answer));
+
+            // The host was not ready, so nothing was sent: give the draft back on the same prompt.
+            if (this != null &&
+                isActiveAndEnabled &&
+                session.ConsumeSubmissionNotSent() &&
+                ReferenceEquals(session.CurrentTurn, submittedTurn) &&
+                string.IsNullOrEmpty(responseInput.text))
+            {
+                responseInput.SetTextWithoutNotify(answer);
+                Refresh();
+            }
         }
         finally
         {
@@ -182,16 +205,79 @@ public class InterviewUIController : MonoBehaviour
             () => session.RequestClarificationAsync(turn));
     }
 
-    private void OnResetClicked()
+    private async void OnResetClicked()
     {
+        if (endInProgress || session.IsEnding)
+            return;
+
+        if (session.UsesHostBridge)
+        {
+            // Host-backed: conversation.end (restart_requested) first; the session resets only
+            // after a definitive terminal acknowledgment and never starts a new attempt itself.
+            await RunEndAsync(session.RestartInterviewAsync);
+
+            if (this == null || !isActiveAndEnabled || !session.IsAtPreStart)
+                return;
+        }
+        else
+        {
+            session.ResetInterview();
+        }
+
+        ClearLocalView();
+    }
+
+    private async void OnEndClicked()
+    {
+        // Deliberately not gated by operationInProgress: end may supersede an outstanding answer.
+        if (endInProgress || !session.CanEnd)
+            return;
+
+        await RunEndAsync(session.EndInterviewAsync);
+    }
+
+    private async Task RunEndAsync(Func<Task> endOperation)
+    {
+        int generation = viewGeneration;
+        endInProgress = true;
+        localError = string.Empty;
+        Refresh();
+
+        try
+        {
+            await endOperation();
+        }
+        catch (Exception)
+        {
+            // Do not expose provider exceptions or conversation content.
+            if (generation == viewGeneration && this != null)
+                localError = "The interview could not be ended. Please try again.";
+        }
+        finally
+        {
+            if (this != null && generation == viewGeneration)
+            {
+                endInProgress = false;
+                if (isActiveAndEnabled)
+                    Refresh();
+            }
+        }
+    }
+
+    private void ClearLocalView()
+    {
+        if (this == null || !isActiveAndEnabled)
+            return;
+
         // Invalidates UI completion callbacks belonging to the old session.
         viewGeneration++;
         operationInProgress = false;
         localError = string.Empty;
         displayedTurn = null;
 
+        endInProgress = false;
         responseInput.SetTextWithoutNotify(string.Empty);
-        session.ResetInterview();
+        Refresh();
     }
 
     private void OnResponseChanged(string unusedText)
@@ -265,11 +351,13 @@ public class InterviewUIController : MonoBehaviour
         bool hasLocalError = !string.IsNullOrEmpty(localError);
         bool awaiting =
             state == InterviewSessionState.AwaitingResponse;
+        bool ending = endInProgress || session.IsEnding;
 
         bool canAnswer =
             awaiting &&
             session.CanSubmit &&
             !operationInProgress &&
+            !ending &&
             !hasLocalError;
 
         roleText.text = session.DisplayRole;
@@ -278,7 +366,9 @@ public class InterviewUIController : MonoBehaviour
             state == InterviewSessionState.Completed
                 ? "Interview complete"
                 : nextTurn != null
-                    ? $"Question {session.CurrentQuestionNumber} of {session.TotalQuestions}"
+                    ? session.TotalQuestions > 0
+                        ? $"Question {session.CurrentQuestionNumber} of {session.TotalQuestions}"
+                        : $"Question {session.CurrentQuestionNumber}"
                     : string.Empty;
 
         switch (state)
@@ -301,6 +391,30 @@ public class InterviewUIController : MonoBehaviour
                     "The interview has stopped. Select Reset Interview to try again.";
                 break;
 
+            case InterviewSessionState.WaitingForHost:
+            case InterviewSessionState.HostUnavailable:
+            case InterviewSessionState.AuthenticationRequired:
+            case InterviewSessionState.OutcomeUnknown:
+                // Fixed, sanitized session text only.
+                interviewerText.text = session.StatusMessage;
+                break;
+
+            case InterviewSessionState.Ending:
+                interviewerText.text = "Ending the interview…";
+                break;
+
+            case InterviewSessionState.Abandoned:
+                interviewerText.text = string.IsNullOrEmpty(session.StatusMessage)
+                    ? "The interview has ended."
+                    : session.StatusMessage;
+                break;
+
+            case InterviewSessionState.Expired:
+                interviewerText.text = string.IsNullOrEmpty(session.StatusMessage)
+                    ? "This interview has timed out."
+                    : session.StatusMessage;
+                break;
+
             default:
                 interviewerText.text =
                     nextTurn != null
@@ -309,11 +423,24 @@ public class InterviewUIController : MonoBehaviour
                 break;
         }
 
+        bool statusShownAsMain =
+            state == InterviewSessionState.Completed ||
+            state == InterviewSessionState.Abandoned ||
+            state == InterviewSessionState.Expired ||
+            state == InterviewSessionState.WaitingForHost ||
+            state == InterviewSessionState.HostUnavailable ||
+            state == InterviewSessionState.AuthenticationRequired ||
+            state == InterviewSessionState.OutcomeUnknown;
+
         statusText.text = hasLocalError
             ? localError
-            : state == InterviewSessionState.Completed
+            : statusShownAsMain
                 ? string.Empty
-                : session.StatusMessage;
+                : !string.IsNullOrEmpty(session.StatusMessage)
+                    ? session.StatusMessage
+                    : awaiting
+                        ? session.ExpiryWarning
+                        : string.Empty;
 
         if (!hasLocalError && operationInProgress)
             statusText.text = "Please wait…";
@@ -321,7 +448,7 @@ public class InterviewUIController : MonoBehaviour
         responseInput.interactable = canAnswer;
 
         startButton.interactable =
-            state == InterviewSessionState.NotStarted &&
+            session.CanStart &&
             !operationInProgress &&
             !hasLocalError;
 
@@ -338,8 +465,17 @@ public class InterviewUIController : MonoBehaviour
             canAnswer && session.CanRequestClarification;
 
         resetButton.interactable =
-            state != InterviewSessionState.NotStarted ||
-            operationInProgress ||
-            hasLocalError;
+            !ending &&
+            (state != InterviewSessionState.NotStarted ||
+             operationInProgress ||
+             hasLocalError);
+
+        if (endButton != null)
+        {
+            if (endButton.gameObject.activeSelf != session.UsesHostBridge)
+                endButton.gameObject.SetActive(session.UsesHostBridge);
+
+            endButton.interactable = session.CanEnd && !ending;
+        }
     }
 }

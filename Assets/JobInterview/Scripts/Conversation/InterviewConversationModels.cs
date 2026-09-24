@@ -38,20 +38,32 @@ public sealed class InterviewResponse
     }
 }
 
+// How a finished interview ended. Completed is natural completion; Abandoned and Expired
+// come only from the host-backed provider (contract section 5).
+public enum InterviewEndKind
+{
+    Completed,
+    Abandoned,
+    Expired
+}
+
 public sealed class InterviewTurnResult
 {
     public bool InterviewComplete { get; }
     public InterviewTurn NextTurn { get; }
     public string CompletionMessage { get; }
+    public InterviewEndKind EndKind { get; }
 
     private InterviewTurnResult(
         bool interviewComplete,
         InterviewTurn nextTurn,
-        string completionMessage)
+        string completionMessage,
+        InterviewEndKind endKind)
     {
         InterviewComplete = interviewComplete;
         NextTurn = nextTurn;
         CompletionMessage = completionMessage;
+        EndKind = endKind;
     }
 
     public static InterviewTurnResult ContinueWith(InterviewTurn nextTurn)
@@ -59,7 +71,8 @@ public sealed class InterviewTurnResult
         return new InterviewTurnResult(
             interviewComplete: false,
             nextTurn: nextTurn,
-            completionMessage: string.Empty);
+            completionMessage: string.Empty,
+            endKind: InterviewEndKind.Completed);
     }
 
     public static InterviewTurnResult Complete(string completionMessage)
@@ -67,6 +80,17 @@ public sealed class InterviewTurnResult
         return new InterviewTurnResult(
             interviewComplete: true,
             nextTurn: null,
-            completionMessage: completionMessage);
+            completionMessage: completionMessage,
+            endKind: InterviewEndKind.Completed);
+    }
+
+    // The interview is over without natural completion. The message is fixed UI text.
+    public static InterviewTurnResult Ended(InterviewEndKind endKind, string message)
+    {
+        return new InterviewTurnResult(
+            interviewComplete: true,
+            nextTurn: null,
+            completionMessage: message,
+            endKind: endKind);
     }
 }

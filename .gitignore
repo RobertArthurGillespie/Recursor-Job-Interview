@@ -34,3 +34,6 @@ crashlytics-build.properties
 # Never commit a real origin; see Docs/job-interview-webgl-bridge.md. Exact paths only.
 /Assets/JobInterview/Resources/RecursorInterviewBridgeSettings.asset
 /Assets/JobInterview/Resources/RecursorInterviewBridgeSettings.asset.meta
+# The Resources folder holds only the ignored asset above, so its folder meta is generated locally
+# by "Job Interview > Create Local Bridge Settings Asset" rather than committed as an orphan.
+/Assets/JobInterview/Resources.meta

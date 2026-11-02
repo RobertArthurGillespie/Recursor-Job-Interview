@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -97,6 +98,12 @@ public sealed class HostBridgeInterviewConversationProvider
     private readonly InterviewBridgeClient client;
     private InterviewTurn currentTurn;
 
+    // Each successful start's first turn, mapped to the ConversationId that same start result returned. Keyed by
+    // the turn object itself, so a telemetry run can only ever get the id of the start that produced its own first
+    // turn, even when a stale start completes around a reset. Weak: an entry lives only as long as its turn.
+    private readonly ConditionalWeakTable<InterviewTurn, string> startedConversationIds =
+        new ConditionalWeakTable<InterviewTurn, string>();
+
     public HostBridgeInterviewConversationProvider(InterviewBridgeClient client)
     {
         this.client = client ?? throw new ArgumentNullException(nameof(client));
@@ -128,6 +135,16 @@ public sealed class HostBridgeInterviewConversationProvider
     public bool HasUnresolvedOperation =>
         client.HasUnresolvedOrdinaryOperation || client.HasUnresolvedEnd;
 
+    // The same bridge's telemetry lane (job-interview-telemetry-v1). Behavioral events only; this provider
+    // never passes conversation content to it.
+    public IInterviewTelemetryChannel TelemetryChannel => client;
+
+    // The ConversationId the host returned for the start that produced exactly this first turn (contract
+    // section 3.4), or null for any other turn. It never falls back to the active conversation, so a telemetry
+    // run cannot borrow another attempt's id.
+    public string StartedConversationIdFor(InterviewTurn firstTurn) =>
+        firstTurn != null && startedConversationIds.TryGetValue(firstTurn, out string id) ? id : null;
+
     public void Connect() => client.Connect();
 
     public void Tick() => client.Tick();
@@ -155,6 +172,7 @@ public sealed class HostBridgeInterviewConversationProvider
             throw new InterviewConversationException(InterviewConversationFailure.ConversationEnded);
 
         currentTurn = ToTurn(result, isClarification: false);
+        startedConversationIds.Add(currentTurn, result.ConversationId); // a new turn object per start
         return currentTurn;
     }
 

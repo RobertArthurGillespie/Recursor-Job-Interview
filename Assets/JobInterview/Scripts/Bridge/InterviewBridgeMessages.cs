@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 // Host -> Unity: bridge.ready.
 public sealed class InterviewBridgeReady
@@ -46,11 +47,85 @@ public sealed class InterviewBridgeResult
         Ok && InterviewBridgeProtocol.States.IsTerminal(ConversationState);
 }
 
+// One behavioral event of a telemetry.batch, exactly as it goes on the wire (contract section 2). Built once
+// when the event is recorded and never changed, so every resend of a batch carries identical content.
+public sealed class InterviewTelemetryWireEvent
+{
+    public InterviewTelemetryWireEvent(
+        string eventId, long sequenceNumber, string timestampUtc, string eventType, string category, string actor,
+        string target, IReadOnlyList<KeyValuePair<string, long>> metrics, IReadOnlyList<KeyValuePair<string, object>> payload)
+    {
+        EventId = eventId;
+        SequenceNumber = sequenceNumber;
+        TimestampUtc = timestampUtc;
+        EventType = eventType;
+        Category = category;
+        Actor = actor;
+        Target = target;
+        Metrics = metrics ?? Array.Empty<KeyValuePair<string, long>>();
+        Payload = payload ?? Array.Empty<KeyValuePair<string, object>>();
+    }
+
+    public string EventId { get; }
+    public long SequenceNumber { get; }
+    public string TimestampUtc { get; }
+    public string EventType { get; }
+    public string Category { get; }
+    public string Actor { get; }
+    public string Target { get; }
+
+    // Whole numbers only (turn index, whole milliseconds), in wire order.
+    public IReadOnlyList<KeyValuePair<string, long>> Metrics { get; }
+
+    // Each value is an enum-member string or a bool, in wire order. Never free text.
+    public IReadOnlyList<KeyValuePair<string, object>> Payload { get; }
+}
+
+// One telemetry.batch. Immutable once cut: a resend reuses the same ConversationId, BatchId, BatchSequence and
+// events. ConversationId is the run's own conversation (Recursor contract section 3.4), for host routing only.
+public sealed class InterviewTelemetryBatch
+{
+    public InterviewTelemetryBatch(string conversationId, string batchId, int batchSequence, string clientTimestampUtc, IReadOnlyList<InterviewTelemetryWireEvent> events)
+    {
+        ConversationId = conversationId;
+        BatchId = batchId;
+        BatchSequence = batchSequence;
+        ClientTimestampUtc = clientTimestampUtc;
+        Events = events ?? Array.Empty<InterviewTelemetryWireEvent>();
+    }
+
+    public string ConversationId { get; }
+    public string BatchId { get; }
+    public int BatchSequence { get; }
+    public string ClientTimestampUtc { get; }
+    public IReadOnlyList<InterviewTelemetryWireEvent> Events { get; }
+}
+
+// Host -> Unity: telemetry.result (BatchId set) or telemetry.finished (BatchId empty), after exact-key and
+// value validation. Outcome and ErrorCode are fixed codes, never free text.
+public sealed class InterviewTelemetryReply
+{
+    public InterviewTelemetryReply(string correlationId, string batchId, string outcome, string errorCode)
+    {
+        CorrelationId = correlationId;
+        BatchId = batchId;
+        Outcome = outcome;
+        ErrorCode = errorCode;
+    }
+
+    public string CorrelationId { get; }
+    public string BatchId { get; }
+    public string Outcome { get; }
+    public string ErrorCode { get; }
+}
+
 public enum InterviewBridgeInboundKind
 {
     Invalid,
     Ready,
     Result,
+    TelemetryResult,
+    TelemetryFinished,
 }
 
 public sealed class InterviewBridgeInbound
@@ -61,22 +136,28 @@ public sealed class InterviewBridgeInbound
     private InterviewBridgeInbound(
         InterviewBridgeInboundKind kind,
         InterviewBridgeReady ready,
-        InterviewBridgeResult result)
+        InterviewBridgeResult result,
+        InterviewTelemetryReply telemetry = null)
     {
         Kind = kind;
         Ready = ready;
         Result = result;
+        Telemetry = telemetry;
     }
 
     public InterviewBridgeInboundKind Kind { get; }
     public InterviewBridgeReady Ready { get; }
     public InterviewBridgeResult Result { get; }
+    public InterviewTelemetryReply Telemetry { get; }
 
     internal static InterviewBridgeInbound ForReady(InterviewBridgeReady ready) =>
         new InterviewBridgeInbound(InterviewBridgeInboundKind.Ready, ready, null);
 
     internal static InterviewBridgeInbound ForResult(InterviewBridgeResult result) =>
         new InterviewBridgeInbound(InterviewBridgeInboundKind.Result, null, result);
+
+    internal static InterviewBridgeInbound ForTelemetry(InterviewBridgeInboundKind kind, InterviewTelemetryReply reply) =>
+        new InterviewBridgeInbound(kind, null, null, reply);
 }
 
 // Builds Unity -> host envelopes with exactly the Stage 6A keys for each type, and parses
@@ -167,6 +248,57 @@ public static class InterviewBridgeMessages
         });
     }
 
+    // telemetry.batch: exactly {batchId, batchSequence, clientTimestampUtc, events}, each event exactly the nine
+    // contract keys. Every value is checked against the host's limits so nothing the host would refuse is posted.
+    // The payload depends only on the batch, so a resend is byte-identical apart from its correlation id.
+    public static string BuildTelemetryBatch(string correlationId, InterviewTelemetryBatch batch)
+    {
+        if (batch == null)
+            throw new ArgumentNullException(nameof(batch));
+        RequireConversationId(batch.ConversationId);
+        if (!InterviewBridgeProtocol.Telemetry.IsValidBatchId(batch.BatchId))
+            throw new ArgumentException("The batch identifier is not valid.", nameof(batch));
+        if (batch.BatchSequence < 0 || batch.BatchSequence > InterviewBridgeProtocol.Telemetry.MaxBatchSequence)
+            throw new ArgumentException("The batch sequence is out of range.", nameof(batch));
+        if (!IsTelemetryTimestamp(batch.ClientTimestampUtc))
+            throw new ArgumentException("The batch timestamp is not valid.", nameof(batch));
+        if (batch.Events.Count < 1 || batch.Events.Count > InterviewBridgeProtocol.Telemetry.MaxEventsPerBatch)
+            throw new ArgumentException("The batch has no events or too many.", nameof(batch));
+
+        var events = new StringBuilder(256 * batch.Events.Count);
+        events.Append('[');
+        for (int i = 0; i < batch.Events.Count; i++)
+        {
+            if (i > 0)
+                events.Append(',');
+            AppendTelemetryEvent(events, batch.Events[i]);
+        }
+        events.Append(']');
+
+        return Envelope(InterviewBridgeProtocol.MessageTypes.TelemetryBatch, correlationId, payload =>
+        {
+            payload.String("conversationId", batch.ConversationId);
+            payload.String("batchId", batch.BatchId);
+            payload.Long("batchSequence", batch.BatchSequence);
+            payload.String("clientTimestampUtc", batch.ClientTimestampUtc);
+            payload.Raw("events", events.ToString());
+        });
+    }
+
+    // telemetry.finish: the run's own conversation, and the last BatchSequence Unity sent or -1 when it sent none.
+    public static string BuildTelemetryFinish(string correlationId, string conversationId, int lastBatchSequence)
+    {
+        RequireConversationId(conversationId);
+        if (lastBatchSequence < -1 || lastBatchSequence > InterviewBridgeProtocol.Telemetry.MaxBatchSequence)
+            throw new ArgumentException("The last batch sequence is out of range.", nameof(lastBatchSequence));
+
+        return Envelope(InterviewBridgeProtocol.MessageTypes.TelemetryFinish, correlationId, payload =>
+        {
+            payload.String("conversationId", conversationId);
+            payload.Long("lastBatchSequence", lastBatchSequence);
+        });
+    }
+
     // Never throws. Anything but an exact Stage 6A host -> Unity envelope is Invalid.
     public static InterviewBridgeInbound Parse(string json)
     {
@@ -195,6 +327,10 @@ public static class InterviewBridgeMessages
                 return ParseReady(correlationId, payload);
             case InterviewBridgeProtocol.MessageTypes.Result:
                 return ParseResult(correlationId, payload);
+            case InterviewBridgeProtocol.MessageTypes.TelemetryResult:
+                return ParseTelemetryResult(correlationId, payload);
+            case InterviewBridgeProtocol.MessageTypes.TelemetryFinished:
+                return ParseTelemetryFinished(correlationId, payload);
             default:
                 // Includes Unity -> host types echoed back and every unknown type.
                 return InterviewBridgeInbound.Invalid;
@@ -266,6 +402,115 @@ public static class InterviewBridgeMessages
 
         return valid ? InterviewBridgeInbound.ForResult(result) : InterviewBridgeInbound.Invalid;
     }
+
+    private static InterviewBridgeInbound ParseTelemetryResult(
+        string correlationId,
+        IReadOnlyDictionary<string, BridgeJsonValue> payload)
+    {
+        // The host echoes an empty batchId only when the batch it received was not valid.
+        if (!HasExactKeys(payload, InterviewBridgeProtocol.PayloadKeys.TelemetryResult) ||
+            !TryString(payload, "batchId", out string batchId) ||
+            (batchId.Length != 0 && !InterviewBridgeProtocol.Telemetry.IsValidBatchId(batchId)) ||
+            !TryString(payload, "outcome", out string outcome) ||
+            !InterviewBridgeProtocol.Telemetry.Outcomes.All.Contains(outcome) ||
+            !TryString(payload, "errorCode", out string errorCode) ||
+            !InterviewBridgeProtocol.Telemetry.IsValidErrorCode(errorCode))
+        {
+            return InterviewBridgeInbound.Invalid;
+        }
+
+        return InterviewBridgeInbound.ForTelemetry(
+            InterviewBridgeInboundKind.TelemetryResult,
+            new InterviewTelemetryReply(correlationId, batchId, outcome, errorCode));
+    }
+
+    private static InterviewBridgeInbound ParseTelemetryFinished(
+        string correlationId,
+        IReadOnlyDictionary<string, BridgeJsonValue> payload)
+    {
+        if (!HasExactKeys(payload, InterviewBridgeProtocol.PayloadKeys.TelemetryFinished) ||
+            !TryString(payload, "outcome", out string outcome) ||
+            !InterviewBridgeProtocol.Telemetry.FinishOutcomes.All.Contains(outcome) ||
+            !TryString(payload, "errorCode", out string errorCode) ||
+            !InterviewBridgeProtocol.Telemetry.IsValidErrorCode(errorCode))
+        {
+            return InterviewBridgeInbound.Invalid;
+        }
+
+        return InterviewBridgeInbound.ForTelemetry(
+            InterviewBridgeInboundKind.TelemetryFinished,
+            new InterviewTelemetryReply(correlationId, string.Empty, outcome, errorCode));
+    }
+
+    private static void AppendTelemetryEvent(StringBuilder builder, InterviewTelemetryWireEvent e)
+    {
+        if (e == null ||
+            !InterviewBridgeProtocol.Telemetry.IsValidEventId(e.EventId) ||
+            e.SequenceNumber < 0 || e.SequenceNumber > InterviewBridgeProtocol.Telemetry.MaxEventSequence ||
+            !IsTelemetryTimestamp(e.TimestampUtc) ||
+            !IsTelemetryToken(e.EventType) || !IsTelemetryToken(e.Category) || !IsTelemetryToken(e.Actor) ||
+            (e.Target.Length != 0 && !IsTelemetryToken(e.Target)) ||
+            e.Metrics.Count > 8 || e.Payload.Count > 8)
+        {
+            throw new ArgumentException("A telemetry event is not valid.");
+        }
+
+        builder.Append('{');
+        var fields = new PayloadWriter(builder);
+        fields.String("eventId", e.EventId);
+        fields.Long("sequenceNumber", e.SequenceNumber);
+        fields.String("timestampUtc", e.TimestampUtc);
+        fields.String("eventType", e.EventType);
+        fields.String("category", e.Category);
+        fields.String("actor", e.Actor);
+        fields.String("target", e.Target);
+
+        var metrics = new StringBuilder("{");
+        var metricWriter = new PayloadWriter(metrics);
+        foreach (KeyValuePair<string, long> metric in e.Metrics)
+        {
+            if (!IsTelemetryKey(metric.Key) || metric.Value < 0)
+                throw new ArgumentException("A telemetry metric is not valid.");
+            metricWriter.Long(metric.Key, metric.Value);
+        }
+        metrics.Append('}');
+        fields.Raw("metrics", metrics.ToString());
+
+        var payload = new StringBuilder("{");
+        var payloadWriter = new PayloadWriter(payload);
+        foreach (KeyValuePair<string, object> item in e.Payload)
+        {
+            if (!IsTelemetryKey(item.Key))
+                throw new ArgumentException("A telemetry payload key is not valid.");
+
+            if (item.Value is bool flag)
+                payloadWriter.Boolean(item.Key, flag);
+            else if (item.Value is string member && TelemetryEnumMember.IsMatch(member))
+                payloadWriter.String(item.Key, member);
+            else
+                throw new ArgumentException("A telemetry payload value is not an enum member or a boolean.");
+        }
+        payload.Append('}');
+        fields.Raw("payload", payload.ToString());
+        builder.Append('}');
+    }
+
+    // The host bridge's structural checks (interview-bridge.js), mirrored so an invalid batch is never posted.
+    private static readonly Regex TelemetryTokenPattern =
+        new Regex("^[a-z][a-z_]{0,63}\\z", RegexOptions.CultureInvariant);
+    private static readonly Regex TelemetryKeyPattern =
+        new Regex("^[A-Za-z]{1,32}\\z", RegexOptions.CultureInvariant);
+    private static readonly Regex TelemetryEnumMember =
+        new Regex("^[a-z][a-z_-]{0,31}\\z", RegexOptions.CultureInvariant);
+    private static readonly Regex TelemetryTimestampPattern =
+        new Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?Z\\z", RegexOptions.CultureInvariant);
+
+    private static bool IsTelemetryToken(string value) => value != null && TelemetryTokenPattern.IsMatch(value);
+
+    private static bool IsTelemetryKey(string value) => value != null && TelemetryKeyPattern.IsMatch(value);
+
+    private static bool IsTelemetryTimestamp(string value) =>
+        value != null && value.Length <= 40 && TelemetryTimestampPattern.IsMatch(value);
 
     private static bool IsValidError(InterviewBridgeResult r, long turnIndex)
     {
@@ -431,6 +676,25 @@ public static class InterviewBridgeMessages
         {
             Key(key);
             builder.Append(value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        public void Long(string key, long value)
+        {
+            Key(key);
+            builder.Append(value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        public void Boolean(string key, bool value)
+        {
+            Key(key);
+            builder.Append(value ? "true" : "false");
+        }
+
+        // An already serialized JSON value (an array or object built by this class).
+        public void Raw(string key, string json)
+        {
+            Key(key);
+            builder.Append(json);
         }
 
         private void Key(string key)

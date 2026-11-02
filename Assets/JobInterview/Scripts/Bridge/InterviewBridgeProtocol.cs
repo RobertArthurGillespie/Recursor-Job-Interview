@@ -75,9 +75,15 @@ public static class InterviewBridgeProtocol
         public const string Clarify = "conversation.clarify";
         public const string End = "conversation.end";
 
+        // Unity -> host: the telemetry lane (job-interview-telemetry-v1 section 9).
+        public const string TelemetryBatch = "telemetry.batch";
+        public const string TelemetryFinish = "telemetry.finish";
+
         // Host -> Unity.
         public const string Ready = "bridge.ready";
         public const string Result = "conversation.result";
+        public const string TelemetryResult = "telemetry.result";
+        public const string TelemetryFinished = "telemetry.finished";
     }
 
     public static class EnvelopeKeys
@@ -111,6 +117,131 @@ public static class InterviewBridgeProtocol
             "questionRef", "interviewerText", "action", "conversationState", "hasExpiry",
             "idleRemainingMs", "absoluteRemainingMs",
         };
+
+        // conversationId (Recursor contract section 3.4) names the conversation whose run the message belongs to.
+        // The host routes by it and never forwards it; it is never part of an event.
+        public static readonly IReadOnlyList<string> TelemetryBatch = new[] { "conversationId", "batchId", "batchSequence", "clientTimestampUtc", "events" };
+        public static readonly IReadOnlyList<string> TelemetryFinish = new[] { "conversationId", "lastBatchSequence" };
+        public static readonly IReadOnlyList<string> TelemetryEvent = new[]
+        {
+            "eventId", "sequenceNumber", "timestampUtc", "eventType", "category", "actor", "target", "metrics", "payload",
+        };
+
+        public static readonly IReadOnlyList<string> TelemetryResult = new[] { "batchId", "outcome", "errorCode" };
+        public static readonly IReadOnlyList<string> TelemetryFinished = new[] { "outcome", "errorCode" };
+    }
+
+    // The telemetry lane of bridge v1 (Recursor docs/contracts/job-interview-telemetry-v1.md sections 3 and 9,
+    // and the host's InterviewTelemetryProtocol). Behavioral events only: no field can carry answer,
+    // clarification or interviewer text, and Unity never sends SessionId, SimId, ScenarioId, UserId or Context.
+    public static class Telemetry
+    {
+        public const int MaxEventsPerBatch = 200;
+        public const int MaxBatchSequence = 100000;
+        public const long MaxEventSequence = 1000000000L;
+        public const int MaxTimingMs = 600000;
+
+        // Host-produced codes are short snake_case identifiers; anything else is dropped.
+        private static readonly Regex ErrorCodePattern =
+            new Regex("^[a-z][a-z0-9_]{0,63}\\z", RegexOptions.CultureInvariant);
+
+        // eventId is wider than a bridge identifier (host: ^[A-Za-z0-9_-]{1,128}$).
+        private static readonly Regex EventIdPattern =
+            new Regex("^[A-Za-z0-9_-]{1,128}\\z", RegexOptions.CultureInvariant);
+
+        public static bool IsValidBatchId(string value) => value != null && IdentifierPattern.IsMatch(value);
+
+        public static bool IsValidEventId(string value) => value != null && EventIdPattern.IsMatch(value);
+
+        public static bool IsValidErrorCode(string value) => value != null && (value.Length == 0 || ErrorCodePattern.IsMatch(value));
+
+        // telemetry.result outcomes.
+        public static class Outcomes
+        {
+            public const string Succeeded = "succeeded";
+            public const string Rejected = "rejected";
+            public const string Forbidden = "forbidden";
+            public const string AuthenticationRequired = "authentication_required";
+            public const string TransportFailure = "transport_failure";
+            public const string Busy = "busy";
+            public const string NotPermitted = "not_permitted";
+
+            public static readonly IReadOnlyCollection<string> All = Set(
+                Succeeded, Rejected, Forbidden, AuthenticationRequired, TransportFailure, Busy, NotPermitted);
+        }
+
+        // telemetry.finished outcomes. Only Ended means every batch was acknowledged and the end succeeded;
+        // it never means the rows are stored or queryable in ADX.
+        public static class FinishOutcomes
+        {
+            public const string Ended = "ended";
+            public const string Incomplete = "incomplete";
+            public const string Busy = "busy";
+            public const string NotPermitted = "not_permitted";
+
+            public static readonly IReadOnlyCollection<string> All = Set(Ended, Incomplete, Busy, NotPermitted);
+        }
+
+        // Host codes that make an incomplete finish final: retrying the same finish cannot succeed.
+        public static class Codes
+        {
+            public const string BatchNotAcknowledged = "bridge_batch_not_acknowledged";
+            public const string BatchRejected = "bridge_batch_rejected";
+        }
+
+        // The Checkpoint 5 vocabulary as Unity emits it (contract section 2). Unity never sends
+        // interview_response_abandoned or interview_interruption_recorded and never infers abandonment.
+        public static class EventTypes
+        {
+            public const string TurnPresented = "interview_turn_presented";
+            public const string ResponseStarted = "interview_response_started";
+            public const string ResponseSubmitted = "interview_response_submitted";
+            public const string ClarificationRequested = "interview_clarification_requested";
+            public const string TurnCompleted = "interview_turn_completed";
+        }
+
+        public static class Categories
+        {
+            public const string TaskAction = "task_action";
+            public const string System = "system";
+        }
+
+        public static class Actors
+        {
+            public const string Applicant = "applicant";
+            public const string System = "system";
+        }
+
+        public static class Targets
+        {
+            public const string Turn = "turn";
+            public const string Response = "response";
+        }
+
+        public static class MetricKeys
+        {
+            public const string TurnIndex = "turnIndex";
+            public const string ResponseLatencyMs = "responseLatencyMs";
+            public const string ResponseDurationMs = "responseDurationMs";
+        }
+
+        public static class PayloadKeys
+        {
+            public const string ResponseLengthBand = "responseLengthBand";
+            public const string TopicCompleted = "topicCompleted";
+            public const string CompletionStatus = "completionStatus";
+        }
+
+        public static class LengthBands
+        {
+            public const string VeryShort = "very-short";
+            public const string Short = "short";
+            public const string Medium = "medium";
+            public const string Long = "long";
+        }
+
+        // P3: only "completed", and only on the last turn of a genuinely completed interview.
+        public const string CompletionStatusCompleted = "completed";
     }
 
     public static class HostStates

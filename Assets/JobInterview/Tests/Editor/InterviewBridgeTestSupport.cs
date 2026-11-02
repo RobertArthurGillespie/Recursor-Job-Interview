@@ -141,6 +141,15 @@ internal static class HostReply
         return Envelope("conversation.result", correlationId, p.ToString());
     }
 
+    // Host -> Unity telemetry replies (job-interview-telemetry-v1 section 9), exactly as the host builds them.
+    public static string TelemetryResult(string correlationId, string batchId, string outcome, string errorCode = "") =>
+        Envelope("telemetry.result", correlationId,
+            "{\"batchId\":" + Q(batchId) + ",\"outcome\":" + Q(outcome) + ",\"errorCode\":" + Q(errorCode) + "}");
+
+    public static string TelemetryFinished(string correlationId, string outcome, string errorCode = "") =>
+        Envelope("telemetry.finished", correlationId,
+            "{\"outcome\":" + Q(outcome) + ",\"errorCode\":" + Q(errorCode) + "}");
+
     public static string Envelope(string type, string correlationId, string payloadJson) =>
         "{\"protocol\":\"recursor.interview.bridge\",\"version\":1,\"type\":" + Q(type) +
         ",\"correlationId\":" + Q(correlationId) + ",\"payload\":" + payloadJson + "}";
@@ -151,6 +160,113 @@ internal static class HostReply
         InterviewBridgeJson.AppendString(builder, value);
         return builder.ToString();
     }
+}
+
+// Test-only JSON reader for asserting on posted telemetry.batch messages, whose events array the bridge's strict
+// inbound reader deliberately does not accept. Objects are Dictionary<string, object> (key order kept in Keys),
+// arrays List<object>, numbers long or double. Throws on malformed input.
+internal static class TestJson
+{
+    public static object Parse(string json)
+    {
+        int i = 0;
+        object value = ReadValue(json, ref i);
+        SkipWhitespace(json, ref i);
+        if (i != json.Length)
+            throw new FormatException("Trailing content.");
+        return value;
+    }
+
+    public static Dictionary<string, object> Object(object value) => (Dictionary<string, object>)value;
+
+    public static List<object> Array(object value) => (List<object>)value;
+
+    private static object ReadValue(string s, ref int i)
+    {
+        SkipWhitespace(s, ref i);
+        char c = s[i];
+        if (c == '{')
+        {
+            var result = new Dictionary<string, object>();
+            i++;
+            SkipWhitespace(s, ref i);
+            if (s[i] == '}') { i++; return result; }
+            while (true)
+            {
+                SkipWhitespace(s, ref i);
+                string key = (string)ReadValue(s, ref i);
+                SkipWhitespace(s, ref i);
+                if (s[i++] != ':') throw new FormatException("Expected ':'.");
+                result.Add(key, ReadValue(s, ref i));
+                SkipWhitespace(s, ref i);
+                if (s[i] == ',') { i++; continue; }
+                if (s[i++] == '}') return result;
+                throw new FormatException("Expected ',' or '}'.");
+            }
+        }
+        if (c == '[')
+        {
+            var result = new List<object>();
+            i++;
+            SkipWhitespace(s, ref i);
+            if (s[i] == ']') { i++; return result; }
+            while (true)
+            {
+                result.Add(ReadValue(s, ref i));
+                SkipWhitespace(s, ref i);
+                if (s[i] == ',') { i++; continue; }
+                if (s[i++] == ']') return result;
+                throw new FormatException("Expected ',' or ']'.");
+            }
+        }
+        if (c == '"')
+        {
+            var builder = new StringBuilder();
+            i++;
+            while (s[i] != '"')
+            {
+                if (s[i] == '\\')
+                {
+                    char e = s[i + 1];
+                    if (e == 'u') { builder.Append((char)Convert.ToInt32(s.Substring(i + 2, 4), 16)); i += 6; continue; }
+                    builder.Append(e == 'n' ? '\n' : e == 'r' ? '\r' : e == 't' ? '\t' : e == 'b' ? '\b' : e == 'f' ? '\f' : e);
+                    i += 2;
+                    continue;
+                }
+                builder.Append(s[i++]);
+            }
+            i++;
+            return builder.ToString();
+        }
+        if (s.Substring(i).StartsWith("true", StringComparison.Ordinal)) { i += 4; return true; }
+        if (s.Substring(i).StartsWith("false", StringComparison.Ordinal)) { i += 5; return false; }
+        if (s.Substring(i).StartsWith("null", StringComparison.Ordinal)) { i += 4; return null; }
+
+        int start = i;
+        while (i < s.Length && "-+.eE0123456789".IndexOf(s[i]) >= 0)
+            i++;
+        string number = s.Substring(start, i - start);
+        if (long.TryParse(number, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out long integer))
+            return integer;
+        return double.Parse(number, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static void SkipWhitespace(string s, ref int i)
+    {
+        while (i < s.Length && char.IsWhiteSpace(s[i]))
+            i++;
+    }
+}
+
+// Deterministic telemetry ids for assertions.
+internal sealed class SequentialTelemetryIds : IInterviewTelemetryIdSource
+{
+    private int batch;
+    private int evt;
+
+    public string NewBatchId() => $"batch-{++batch:D4}";
+
+    public string NewEventId() => $"evt-{++evt:D4}";
 }
 
 // A client already handshaken (Ready) with helpers for common flows.

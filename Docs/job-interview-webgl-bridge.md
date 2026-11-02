@@ -95,3 +95,93 @@ A WebGL build fails with a fixed, value-free message unless:
 `InterviewSessionController.providerMode` defaults to **Automatic**: the Blazor-parent bridge in
 a WebGL player, the scripted provider (unchanged, for offline/editor use) everywhere else. Set it
 to **ScriptedLocal** to force the scripted interview in a WebGL build.
+
+## 6. Observation telemetry (telemetry lane)
+
+Governed by the Recursor repository's `docs/contracts/job-interview-telemetry-v1.md` (merged in
+PR #31, master `47cf7ff`). Host-bridge mode only; the scripted provider sends nothing.
+
+**What Unity sends.** `InterviewTelemetrySender` (in `Scripts/Telemetry/`) turns
+`InterviewBehaviorCollector` observations into the five contract events:
+
+- `interview_turn_presented`, `interview_response_started`, `interview_clarification_requested`,
+  `interview_response_submitted` and `interview_turn_completed`;
+- metrics: `turnIndex`, plus whole-millisecond `responseLatencyMs` / `responseDurationMs` only when
+  observed and within 0–600000;
+- payload: `responseLengthBand` (a band, never a count or text), and on a completed turn
+  `topicCompleted` (and `completionStatus` only as below).
+
+It never sends `interview_response_abandoned` or `interview_interruption_recorded`, and it never
+infers abandonment.
+
+**`topicCompleted` is structural (P1).** It is `true` when the next prompt has a different
+`questionRef` (a new core question) or the interview genuinely completed, and `false` for a
+follow-up on the same question. It is never a judgment of the answer.
+
+**`completionStatus` (P3).** It is `"completed"` only on the last completed turn of a genuinely
+completed interview. It is never sent on an ordinary turn, an explicit end, a restart, an expiry,
+an interruption or an error.
+
+**Batches and order.**
+
+- One telemetry run per conversation, from its first prompt.
+- A batch is cut right after each `interview_turn_completed`. When the conversation ends, or the
+  screen is reset, any remaining events form one final batch; an empty batch is never sent.
+- Batches go out one at a time in `BatchSequence` order (from 0 per run). `telemetry.finish
+  {conversationId, lastBatchSequence}` (-1 when none) goes only after every batch has a result. A
+  later run waits for the earlier run's finish.
+
+**Run conversation id (contract §3.4).**
+
+- Every `telemetry.batch` and `telemetry.finish` carries `conversationId` as the first payload field.
+  It is the server `ConversationId` that the host returned for the start of the run's own
+  conversation, the same opaque value the conversation lane already sends with
+  `answer`/`clarify`/`end`. The host routes each message to that conversation's own Recursor session
+  and never forwards the id to the server. It is never part of an event.
+- **Bound once.** The controller passes
+  `HostBridgeInterviewConversationProvider.StartedConversationIdFor(firstTurn)` to `BeginRun`. That id
+  comes from the reply to the start that produced exactly that first turn, never from the active
+  conversation.
+- **Never replaced.** Resends, finishes, runs queued behind an earlier run, and an earlier run still
+  delivering after a reset all keep their run's own id.
+- **No valid id, no telemetry.** A run without a valid id records and sends nothing. It is
+  `Incomplete` with `telemetry_no_conversation`. The builders and the bridge client also refuse an
+  invalid id, so nothing is posted.
+
+**Retries (Unity-owned, P4).**
+
+- After an ambiguous outcome — `transport_failure`, `busy`, no reply within 75 s, or not posted —
+  the *same* batch (same `BatchId`, `BatchSequence`, event ids and bytes) is resent at most twice,
+  after 1 s and then 3 s. It is then left unacknowledged and the next batch follows.
+- A definitive `rejected` is never resent. `forbidden`, `authentication_required` or
+  `not_permitted` stops the run: no further batch and no finish.
+- An `incomplete` finish caused by a failed end (for example `terminal_window_not_submitted`) or a
+  transport failure is resent on the same schedule. One caused by `bridge_batch_not_acknowledged`
+  or `bridge_batch_rejected` is final.
+
+**Outcomes.** `InterviewSessionController.TelemetryStatus` / `TelemetryStatusCode`:
+
+- `Ended`: the host acknowledged every batch and ended the Recursor session. It does **not**
+  confirm the data is stored or queryable in ADX (the server uses queued ingestion).
+- `Incomplete`: telemetry is not known to be complete, with a fixed reason code. Nothing is
+  reported as saved.
+
+The interview UI is unchanged and shows no telemetry status.
+
+**Boundaries.** The telemetry lane never blocks or changes a conversation operation, and a
+conversation reset does not cancel it. No message carries answer, clarification or interviewer
+text, a token, a learner key, a server `SessionId`, `UserId`, `SimId`, `ScenarioId` or `Context`:
+the host adds those from its own session. Payload values are enum members or booleans only, and
+`BuildTelemetryBatch` refuses anything else before posting.
+
+**Host compatibility.**
+
+- Requires a host with the Recursor contract §3.4 amendment: the host-session lifecycle change on the
+  Recursor branch `fix/recursor-interview-host-session-lifecycle`, not merged or deployed at the time of
+  writing. Release the amended host before any build with this sender is used.
+  - **Hosts at `47cf7ff` before §3.4** refuse these messages, because they don't expect `conversationId`.
+  - **Older hosts** (for example the currently deployed `38604a5`) silently drop `telemetry.*` messages.
+  - **In both cases**, the run ends `Incomplete` and the interview itself is unaffected.
+
+**Tests.** `Tests/Editor/InterviewTelemetrySenderTests.cs` (EditMode). One test briefly creates an
+`InterviewScenarioDefinition` to drive the host-backed provider, and destroys it afterwards.

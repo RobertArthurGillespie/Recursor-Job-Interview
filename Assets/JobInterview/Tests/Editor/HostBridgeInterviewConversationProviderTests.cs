@@ -235,7 +235,7 @@ public class HostBridgeInterviewConversationProviderTests
             .ToArray();
 
         CollectionAssert.AreEqual(
-            new[] { "CompletionStatus", "EventType", "Kind", "ResponseDurationMs", "ResponseLatencyMs", "ResponseLengthBand", "TurnIndex" },
+            new[] { "CompletionStatus", "EventType", "Kind", "ResponseDurationMs", "ResponseLatencyMs", "ResponseLengthBand", "TimestampUtc", "TopicCompleted", "TurnIndex" },
             properties);
     }
 
@@ -247,6 +247,9 @@ public class HostBridgeInterviewConversationProviderTests
         {
             typeof(InterviewBridgeClient), typeof(HostBridgeInterviewConversationProvider), typeof(InterviewBridgeMessages),
             typeof(InterviewBridgeJson), typeof(WebGLInterviewBridgeTransport),
+
+            // The telemetry sender receives observations only through InterviewBehaviorCollector.Recorded.
+            typeof(InterviewTelemetrySender),
         };
 
         foreach (Type type in bridgeTypes)

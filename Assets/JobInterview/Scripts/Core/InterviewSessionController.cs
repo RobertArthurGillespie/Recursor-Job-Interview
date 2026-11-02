@@ -62,6 +62,12 @@ public class InterviewSessionController : MonoBehaviour
     private string statusMessage = string.Empty;
     private readonly InterviewBehaviorCollector behavior = new InterviewBehaviorCollector();
     public IReadOnlyList<InterviewBehaviorEvent> BehaviorEvents => behavior.Events;
+
+    // Host-backed mode only: observation telemetry for the host's Recursor session
+    // (Recursor docs/contracts/job-interview-telemetry-v1.md). Behavioral events only; never conversation text.
+    private InterviewTelemetrySender telemetry;
+    public InterviewTelemetryRunStatus TelemetryStatus => telemetry?.Status ?? InterviewTelemetryRunStatus.None;
+    public string TelemetryStatusCode => telemetry?.StatusCode ?? string.Empty;
     public int DroppedBehaviorEventCount => behavior.DroppedEventCount;
     public int OmittedBehaviorTimingCount => behavior.OmittedTimingCount;
 
@@ -141,6 +147,13 @@ public class InterviewSessionController : MonoBehaviour
             hostProvider = InterviewBridgeRuntime.CreateProvider();
             host = hostProvider;
             host.Changed += OnHostChanged;
+
+            telemetry = new InterviewTelemetrySender(
+                hostProvider.TelemetryChannel,
+                new InterviewTelemetryIdSource(),
+                () => Time.realtimeSinceStartupAsDouble,
+                () => DateTime.UtcNow);
+            behavior.Recorded += telemetry.Record;
         }
 
         ClearSession();
@@ -164,6 +177,7 @@ public class InterviewSessionController : MonoBehaviour
             return;
 
         host.Tick();
+        telemetry?.Tick();
         UpdateExpiryWarning();
     }
 
@@ -232,6 +246,9 @@ public class InterviewSessionController : MonoBehaviour
             if (!IsCurrentOperation(generation, InterviewSessionState.LoadingTurn))
                 return;
 
+            // One telemetry run per conversation, from its first prompt, bound to the ConversationId the
+            // host returned for exactly this start (never the active or another attempt's conversation).
+            telemetry?.BeginRun(hostProvider != null ? hostProvider.StartedConversationIdFor(turn) : null);
             PresentTurn(turn);
         }
         catch (InterviewConversationException ex)
@@ -295,6 +312,7 @@ public class InterviewSessionController : MonoBehaviour
 
         // No controller field retains the applicant's answer.
         int submittedTurnIndex = currentTurn.TurnIndex;
+        string submittedQuestionId = currentTurn.QuestionId;
         behavior.Submit(submittedTurnIndex, responseText.Length);
         responseText = null;
         statusMessage = string.Empty;
@@ -319,8 +337,21 @@ public class InterviewSessionController : MonoBehaviour
             if (!result.InterviewComplete && result.NextTurn == null)
                 throw new InvalidOperationException();
 
-            if (!result.InterviewComplete || result.EndKind == InterviewEndKind.Completed)
-                behavior.CompleteTurn(submittedTurnIndex);
+            // topicCompleted is structural (contract P1): the next prompt is a different core question
+            // (a different questionRef), or the interview genuinely completed. A follow-up keeps the same
+            // questionRef. It never reflects answer quality. completionStatus is sent only on genuine
+            // completion (P3); an abandoned or expired end records no completed turn at all.
+            if (!result.InterviewComplete)
+            {
+                behavior.CompleteTurn(
+                    submittedTurnIndex,
+                    topicCompleted: InterviewTelemetrySender.IsTopicBoundary(submittedQuestionId, result.NextTurn),
+                    interviewCompleted: false);
+            }
+            else if (result.EndKind == InterviewEndKind.Completed)
+            {
+                behavior.CompleteTurn(submittedTurnIndex, topicCompleted: true, interviewCompleted: true);
+            }
 
             if (result.InterviewComplete)
             {
@@ -328,6 +359,7 @@ public class InterviewSessionController : MonoBehaviour
                 statusMessage = result.CompletionMessage ?? string.Empty;
 
                 activeProvider.Reset();
+                telemetry?.EndRun();
                 SetState(ToSessionState(result.EndKind));
             }
             else
@@ -480,6 +512,8 @@ public class InterviewSessionController : MonoBehaviour
 
         if (result.IsEnded)
         {
+            telemetry?.EndRun();
+
             if (resetAfterEnd)
             {
                 ResetInterview();
@@ -711,6 +745,7 @@ public class InterviewSessionController : MonoBehaviour
 
     private void SetTerminal(InterviewSessionState terminalState, string safeMessage)
     {
+        telemetry?.EndRun();
         currentTurn = null;
         statusMessage = safeMessage;
         SetState(terminalState);
@@ -734,6 +769,9 @@ public class InterviewSessionController : MonoBehaviour
     {
         // Invalidates results from any operation belonging to the old session.
         sessionGeneration++;
+
+        // A conversation that is being cleared sends its remaining telemetry and then its finish.
+        telemetry?.EndRun();
         behavior.Clear();
 
         if (sessionCancellation != null)
@@ -774,8 +812,9 @@ public class InterviewSessionController : MonoBehaviour
     {
         if (!Application.isPlaying) return;
         foreach (var item in behavior.Events)
-            Debug.Log($"[Interview behavior] {item.EventType}; turn={item.TurnIndex}; latencyMs={item.ResponseLatencyMs}; durationMs={item.ResponseDurationMs}; band={item.ResponseLengthBand}; completion={item.CompletionStatus}");
+            Debug.Log($"[Interview behavior] {item.EventType}; turn={item.TurnIndex}; latencyMs={item.ResponseLatencyMs}; durationMs={item.ResponseDurationMs}; band={item.ResponseLengthBand}; topic={item.TopicCompleted}; completion={item.CompletionStatus}");
         Debug.Log($"[Interview behavior] count={behavior.Events.Count}; dropped={behavior.DroppedEventCount}; omittedTimings={behavior.OmittedTimingCount}");
+        Debug.Log($"[Interview telemetry] status={TelemetryStatus}; code={TelemetryStatusCode}");
     }
     // Temporary manual controls. These use synthetic text only and
     // are excluded from player builds.

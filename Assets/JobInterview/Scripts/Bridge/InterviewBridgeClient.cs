@@ -91,6 +91,51 @@ public sealed class InterviewOperationOutcome
     public InterviewBridgeResult Result { get; }
 }
 
+public enum InterviewTelemetryAttemptStatus
+{
+    Pending,
+
+    // The host answered; Outcome and ErrorCode hold its fixed codes.
+    Replied,
+
+    // Nothing was posted (the bridge was not ready, or the transport refused the message).
+    NotSent,
+
+    // Posted, but no reply arrived within the reply timeout: the outcome is unknown.
+    NoReply,
+
+    // The bridge was disposed.
+    Cancelled,
+}
+
+// One transport attempt on the telemetry lane. Polled by InterviewTelemetrySender, which owns retries.
+public sealed class InterviewTelemetryAttempt
+{
+    internal InterviewTelemetryAttempt(string expectedBatchId) => ExpectedBatchId = expectedBatchId;
+
+    public InterviewTelemetryAttemptStatus Status { get; internal set; } = InterviewTelemetryAttemptStatus.Pending;
+    public bool IsComplete => Status != InterviewTelemetryAttemptStatus.Pending;
+
+    // Fixed codes only (telemetry.result / telemetry.finished), or empty.
+    public string Outcome { get; internal set; } = string.Empty;
+    public string ErrorCode { get; internal set; } = string.Empty;
+
+    // Empty for a finish.
+    internal string ExpectedBatchId { get; }
+    internal string Correlation { get; set; }
+    internal double Deadline { get; set; }
+}
+
+// The telemetry lane as InterviewTelemetrySender sees it. Each call is exactly one transport attempt.
+public interface IInterviewTelemetryChannel
+{
+    bool IsReady { get; }
+    InterviewTelemetryAttempt SendTelemetryBatch(InterviewTelemetryBatch batch);
+
+    // conversationId: the finishing run's own conversation, never the current one.
+    InterviewTelemetryAttempt SendTelemetryFinish(string conversationId, int lastBatchSequence);
+}
+
 // Stage 6B Unity side of the Stage 6A bridge. Owns the handshake, correlation, lanes, retries,
 // conversation tracking, and fail-closed handling of stale, duplicate, and malformed replies.
 // It never sees or stores a token, SessionId, OwnerId, or telemetry UserId, and never logs.
@@ -98,7 +143,12 @@ public sealed class InterviewOperationOutcome
 // Lanes mirror the host: start/answer/clarify share one single-flight lane; end has its own and
 // may supersede an outstanding answer/clarify. Every transport attempt has a fresh correlation
 // id; every logical operation has one RequestId, reused unchanged by its retries.
-public sealed class InterviewBridgeClient : IDisposable
+//
+// The telemetry lane (job-interview-telemetry-v1) is independent of both: it never blocks, delays or
+// changes a conversation operation, and a conversation reset does not cancel it, so a run's final batch
+// and finish can still go out after an end or restart. It makes single attempts only; the sender
+// decides on exact resends.
+public sealed class InterviewBridgeClient : IDisposable, IInterviewTelemetryChannel
 {
     // Longer than the host's 60-second HTTP timeout, so the host lane is free before a retry.
     public const double ReplyTimeoutSeconds = 75.0;
@@ -119,6 +169,8 @@ public sealed class InterviewBridgeClient : IDisposable
 
     private readonly HashSet<string> helloCorrelations = new HashSet<string>(StringComparer.Ordinal);
     private readonly Dictionary<string, Operation> inFlight = new Dictionary<string, Operation>(StringComparer.Ordinal);
+    private readonly Dictionary<string, InterviewTelemetryAttempt> telemetryInFlight =
+        new Dictionary<string, InterviewTelemetryAttempt>(StringComparer.Ordinal);
 
     private int helloAttempts;
     private double nextHelloAt;
@@ -238,6 +290,34 @@ public sealed class InterviewBridgeClient : IDisposable
                 Send(op);
             }
         }
+
+        foreach (InterviewTelemetryAttempt attempt in telemetryInFlight.Values.Where(a => now >= a.Deadline).ToList())
+        {
+            // A reply that arrives later carries a retired correlation id and is ignored.
+            telemetryInFlight.Remove(attempt.Correlation);
+            attempt.Status = InterviewTelemetryAttemptStatus.NoReply;
+        }
+    }
+
+    public bool IsReady => !disposed && Status == InterviewBridgeStatus.Ready;
+
+    public InterviewTelemetryAttempt SendTelemetryBatch(InterviewTelemetryBatch batch)
+    {
+        if (batch == null)
+            throw new ArgumentNullException(nameof(batch));
+
+        var attempt = new InterviewTelemetryAttempt(batch.BatchId);
+        PostTelemetry(attempt, correlationId => InterviewBridgeMessages.BuildTelemetryBatch(correlationId, batch));
+        return attempt;
+    }
+
+    // Uses exactly the conversationId it is given (the run's own); it never reads the active conversation.
+    // An invalid id is refused by the builder, so nothing is posted (NotSent).
+    public InterviewTelemetryAttempt SendTelemetryFinish(string conversationId, int lastBatchSequence)
+    {
+        var attempt = new InterviewTelemetryAttempt(string.Empty);
+        PostTelemetry(attempt, correlationId => InterviewBridgeMessages.BuildTelemetryFinish(correlationId, conversationId, lastBatchSequence));
+        return attempt;
     }
 
     public Task<InterviewOperationOutcome> StartAsync()
@@ -393,6 +473,11 @@ public sealed class InterviewBridgeClient : IDisposable
         ClearConversation();
         unresolvedStart = null;
         unresolvedEnd = null;
+
+        foreach (InterviewTelemetryAttempt attempt in telemetryInFlight.Values)
+            attempt.Status = InterviewTelemetryAttemptStatus.Cancelled;
+        telemetryInFlight.Clear();
+
         transport.Received -= Receive;
         (transport as IDisposable)?.Dispose();
         disposed = true;
@@ -426,10 +511,67 @@ public sealed class InterviewBridgeClient : IDisposable
                 HandleResult(op, inbound.Result);
                 return;
 
+            case InterviewBridgeInboundKind.TelemetryResult:
+            case InterviewBridgeInboundKind.TelemetryFinished:
+                HandleTelemetryReply(inbound.Kind, inbound.Telemetry);
+                return;
+
             default:
                 IgnoredMessageCount++;
                 return;
         }
+    }
+
+    private void PostTelemetry(InterviewTelemetryAttempt attempt, Func<string, string> build)
+    {
+        if (!IsReady)
+        {
+            attempt.Status = InterviewTelemetryAttemptStatus.NotSent;
+            return;
+        }
+
+        string correlationId = ids.NewCorrelationId();
+        string json;
+
+        try
+        {
+            json = build(correlationId);
+        }
+        catch (ArgumentException)
+        {
+            attempt.Status = InterviewTelemetryAttemptStatus.NotSent;
+            return;
+        }
+
+        attempt.Correlation = correlationId;
+        attempt.Deadline = clock() + ReplyTimeoutSeconds;
+        telemetryInFlight[correlationId] = attempt;
+
+        if (!transport.Post(json))
+        {
+            telemetryInFlight.Remove(correlationId);
+            attempt.Status = InterviewTelemetryAttemptStatus.NotSent;
+        }
+    }
+
+    private void HandleTelemetryReply(InterviewBridgeInboundKind kind, InterviewTelemetryReply reply)
+    {
+        // A reply must answer an outstanding attempt of the same kind; a batch result must name that batch
+        // (or carry the empty id the host echoes for a batch it could not read).
+        if (!telemetryInFlight.TryGetValue(reply.CorrelationId, out InterviewTelemetryAttempt attempt) ||
+            (kind == InterviewBridgeInboundKind.TelemetryFinished) != (attempt.ExpectedBatchId.Length == 0) ||
+            (kind == InterviewBridgeInboundKind.TelemetryResult &&
+             reply.BatchId.Length != 0 &&
+             !string.Equals(reply.BatchId, attempt.ExpectedBatchId, StringComparison.Ordinal)))
+        {
+            IgnoredMessageCount++;
+            return;
+        }
+
+        telemetryInFlight.Remove(reply.CorrelationId);
+        attempt.Outcome = reply.Outcome;
+        attempt.ErrorCode = reply.ErrorCode;
+        attempt.Status = InterviewTelemetryAttemptStatus.Replied;
     }
 
     private Task<InterviewOperationOutcome> CheckOrdinaryAdmission(int turnIndex)
